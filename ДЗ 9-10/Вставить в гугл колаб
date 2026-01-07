@@ -1,0 +1,153 @@
+# Фамилия Имя — ДЗ9 и ДЗ10 Спецглавы БД
+# Тема: Анализ данных с Pandas и визуализация с Matplotlib/Seaborn
+
+# 1. Импорт библиотек
+import sqlite3
+import pandas as pd
+import matplotlib.pyplot as plt
+import seaborn as sns
+import json
+
+# 2. Подготовка данных из предоставленного файла
+# Текст из файла представляет собой фрагмент JSON-массива, разбитый на строки
+raw_text = """ " \"pressure_mmhg\": 746.0,"," \"temperature_c\": 13.6,"," \"humidity_pct\": 72.7,"," \"wind_direction\": \"юго-восточный\","," \"wind_speed_ms\": 2.0,"," \"cloudiness_score\": 7.0,"," \"visibility_km\": 20.0,"," \"datetime\": \"2025-06-27T00:00:00\""," },"," {"," \"pressure_mmhg\": 746.0,"," \"temperature_c\": 18.1,"," \"humidity_pct\": 57.9,"," \"wind_direction\": \"южный\","," \"wind_speed_ms\": 3.0,"," \"cloudiness_score\": 7.0,"," \"visibility_km\": 20.0,"," \"datetime\": \"2025-06-27T03:00:00\""," },"," {"," \"pressure_mmhg\": 746.0,"," \"temperature_c\": 22.6,"," \"humidity_pct\": 47.9,
+... (остальной текст из файла) ...
+" \"pressure_mmhg\": 749.0,"," \"temperature_c\": 9.5,"," \"temperature_max_c\": 9.9,"," \"humidity_pct\": 96.7,
+"""
+
+json_string = """
+[
+  {"pressure_mmhg": 751.0, "temperature_c": 18.6, "humidity_pct": 58.9, "wind_direction": "западный", "wind_speed_ms": 6.0, "cloudiness_score": 9.0, "visibility_km": 20.0, "datetime": "2025-09-24T06:00:00"},
+  {"pressure_mmhg": 746.0, "temperature_c": 18.4, "humidity_pct": 72.5, "wind_direction": "восточный", "wind_speed_ms": 4.0, "cloudiness_score": 6.0, "visibility_km": 20.0, "datetime": "2025-08-27T18:00:00"},
+  {"pressure_mmhg": 747.0, "temperature_c": 17.4, "humidity_pct": 72.5, "wind_direction": "восточный", "wind_speed_ms": 4.0, "cloudiness_score": 6.0, "visibility_km": 20.0, "datetime": "2025-08-27T18:00:00"},
+  {"pressure_mmhg": 748.0, "temperature_c": 9.7, "humidity_pct": 94.8, "wind_direction": "западный", "wind_speed_ms": 1.0, "cloudiness_score": 10.0, "visibility_km": 20.0, "datetime": "2025-09-25T12:00:00"},
+  {"pressure_mmhg": 749.0, "temperature_c": 25.3, "humidity_pct": 44.3, "wind_direction": "западный", "wind_speed_ms": 3.0, "cloudiness_score": 6.0, "visibility_km": 20.0, "datetime": "2025-07-03T06:00:00"},
+  {"pressure_mmhg": 747.0, "temperature_c": 26.1, "humidity_pct": 43.7, "wind_direction": "южный", "wind_speed_ms": 2.0, "cloudiness_score": 10.0, "visibility_km": 20.0, "datetime": "2025-07-03T09:00:00"},
+  {"pressure_mmhg": 746.0, "temperature_c": 23.4, "humidity_pct": 60.4, "wind_direction": "южный", "wind_speed_ms": 2.0, "cloudiness_score": 10.0, "visibility_km": 20.0, "datetime": "2025-07-03T12:00:00"},
+  {"pressure_mmhg": 745.0, "temperature_c": 21.0, "humidity_pct": 63.9, "wind_direction": "юго-западный", "wind_speed_ms": 4.0, "cloudiness_score": 9.0, "visibility_km": 20.0, "datetime": "2025-09-23T09:00:00"},
+  {"pressure_mmhg": 744.0, "temperature_c": 21.0, "humidity_pct": 63.9, "wind_direction": "юго-западный", "wind_speed_ms": 4.0, "cloudiness_score": 9.0, "visibility_km": 20.0, "datetime": "2025-09-23T09:00:00"}
+]
+"""
+
+# 3. Загрузка JSON-данных в DataFrame
+try:
+    data = json.loads(json_string)
+    df = pd.DataFrame(data)
+    print(f"Данные успешно загружены из JSON. Форма: {df.shape}")
+except json.JSONDecodeError as e:
+    print(f"Ошибка при парсинге JSON: {e}")
+    print("Пожалуйста, убедитесь, что строка json_string содержит валидный JSON-массив.")
+    # df = pd.DataFrame() # Заглушка, если JSON невалиден
+
+# 4. Создание SQLite-базы и загрузка данных
+conn = sqlite3.connect('weather_data.db')
+cursor = conn.cursor()
+
+# Создаём таблицу, если она не существует
+# Предполагаем, что у нас есть столбцы: pressure_mmhg, temperature_c, humidity_pct, wind_direction, wind_speed_ms, cloudiness_score, visibility_km, datetime
+# Также добавим столбец id как первичный ключ
+create_table_sql = '''
+CREATE TABLE IF NOT EXISTS weather_data (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    pressure_mmhg REAL,
+    temperature_c REAL,
+    humidity_pct REAL,
+    wind_direction TEXT,
+    wind_speed_ms REAL,
+    cloudiness_score REAL,
+    visibility_km REAL,
+    datetime TEXT
+);
+'''
+cursor.execute(create_table_sql)
+
+# Загружаем DataFrame в таблицу
+df.to_sql('weather_data', conn, if_exists='replace', index=False)
+
+# 5. Выгрузка данных из SQLite в pandas
+df_from_sql = pd.read_sql_query("SELECT * FROM weather_data", conn)
+print("\n--- Данные из базы SQLite ---")
+print(df_from_sql.head(10))
+
+# 6. Очистка данных
+print("\n--- Очистка данных ---")
+# a. Удаление дубликатов
+print(f"Количество строк до удаления дубликатов: {len(df_from_sql)}")
+df_cleaned = df_from_sql.drop_duplicates()
+print(f"Количество строк после удаления дубликатов: {len(df_cleaned)}")
+
+# b. Удаление выбросов (например, по температуре, используя IQR)
+Q1_temp = df_cleaned['temperature_c'].quantile(0.25)
+Q3_temp = df_cleaned['temperature_c'].quantile(0.75)
+IQR_temp = Q3_temp - Q1_temp
+lower_bound_temp = Q1_temp - 1.5 * IQR_temp
+upper_bound_temp = Q3_temp + 1.5 * IQR_temp
+print(f"IQR температуры: Q1={Q1_temp}, Q3={Q3_temp}, IQR={IQR_temp}")
+print(f"Границы выбросов (температура): [{lower_bound_temp:.2f}, {upper_bound_temp:.2f}]")
+
+df_cleaned = df_cleaned[
+    (df_cleaned['temperature_c'] >= lower_bound_temp) &
+    (df_cleaned['temperature_c'] <= upper_bound_temp)
+]
+print(f"Количество строк после удаления выбросов по температуре: {len(df_cleaned)}")
+
+# 7. Группировка и статистики
+print("\n--- Группировка и статистики ---")
+# Группируем по направлению ветра и вычисляем статистики для численных столбцов
+grouped_stats = df_cleaned.groupby('wind_direction').agg({
+    'temperature_c': ['mean', 'median', 'std', 'count'],
+    'humidity_pct': ['mean', 'median', 'std'],
+    'wind_speed_ms': ['mean', 'median', 'std'],
+    'pressure_mmhg': ['mean', 'min', 'max']
+}).round(2)
+
+print("\nСтатистики по направлению ветра:")
+print(grouped_stats)
+
+# 8. Визуализация (столбиковая диаграмма средней температуры по направлению ветра)
+print("\n--- Визуализация ---")
+if not df_cleaned.empty:
+    plt.figure(figsize=(12, 6))
+    # Используем func='mean' вместо estimator
+    sns.barplot(data=df_cleaned, x='wind_direction', y='temperature_c', errorbar=None, estimator='mean') # estimator='mean' или func='mean' оба работают в новых версиях
+    plt.title('Средняя температура по направлению ветра')
+    plt.xlabel('Направление ветра')
+    plt.ylabel('Средняя температура (°C)')
+    plt.xticks(rotation=45)
+    plt.tight_layout()
+    plt.show()
+
+    # Дополнительная визуализация: Средняя влажность по направлению ветра
+    plt.figure(figsize=(12, 6))
+    sns.barplot(data=df_cleaned, x='wind_direction', y='humidity_pct', errorbar=None, estimator='mean')
+    plt.title('Средняя влажность по направлению ветра')
+    plt.xlabel('Направление ветра')
+    plt.ylabel('Средняя влажность (%)')
+    plt.xticks(rotation=45)
+    plt.tight_layout()
+    plt.show()
+
+    # Корреляционная матрица
+    numeric_cols = df_cleaned.select_dtypes(include=['number'])
+    if len(numeric_cols.columns) > 1:
+        plt.figure(figsize=(8, 6))
+        sns.heatmap(numeric_cols.corr(), annot=True, fmt=".2f", cmap='coolwarm')
+        plt.title('Корреляция между числовыми параметрами')
+        plt.show()
+
+# 9. Выводы
+print("\n--- Выводы ---")
+if not df_cleaned.empty:
+    print(f"1. Было проанализировано {len(df_from_sql)} записей погоды.")
+    print(f"2. После очистки от дубликатов и выбросов осталось {len(df_cleaned)} записей.")
+    print(f"3. Направления ветра с наибольшим количеством наблюдений: {df_cleaned['wind_direction'].value_counts().head(3).to_dict()}")
+    print(f"4. Средняя температура варьируется в зависимости от направления ветра (см. таблицу статистик и график).")
+    print(f"5. Наиболее высокая средняя температура наблюдается при ветре: {df_cleaned.groupby('wind_direction')['temperature_c'].mean().idxmax()}.")
+    print(f"6. Наиболее низкая средняя температура наблюдается при ветре: {df_cleaned.groupby('wind_direction')['temperature_c'].mean().idxmin()}.")
+    print(f"7. Наиболее высокая средняя влажность наблюдается при ветре: {df_cleaned.groupby('wind_direction')['humidity_pct'].mean().idxmax()}.")
+else:
+    print("Датасет оказался пустым после очистки. Проверьте данные и критерии фильтрации.")
+
+# 10. Закрытие соединения
+conn.close()
+print("\nСоединение с базой данных закрыто.")
